@@ -1,0 +1,6 @@
+{
+  "name": "SAT-SA — Supervisory Analytics Tool for SOC Assessment",
+  "description": "Supervisory analytics platform for NCIIPC supervisors to evaluate Critical Sector Entities (CSE) SOC effectiveness, detect execution gaps, negative-space signals, and KPI-evidence contradictions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
