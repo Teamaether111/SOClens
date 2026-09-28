@@ -19,6 +19,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
 
     try {
       const res = await api.login({ username, password });
+      localStorage.setItem('soclens_token', res.token);
+      localStorage.setItem('soclens_user', JSON.stringify(res.user));
       localStorage.setItem('sat_sa_token', res.token);
       localStorage.setItem('sat_sa_user', JSON.stringify(res.user));
       onLoginSuccess(res.user, res.token);
@@ -47,7 +49,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <Shield className="w-6 h-6" />
           </div>
           <div className="flex items-center justify-center gap-2">
-            <span className="font-mono text-xl font-black text-slate-100 tracking-wider">SAT-SA</span>
+            <span className="font-mono text-xl font-black text-slate-100 tracking-wider">SOClens</span>
             <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold">
               NCIIPC
             </span>

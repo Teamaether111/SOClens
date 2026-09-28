@@ -1,12 +1,12 @@
 /**
- * SAT-SA Frontend API Client
+ * SOClens Frontend API Client
  * Connects directly to local supervisory backend /api/* routes
  */
 
 const API_BASE = '/api';
 
 function getAuthHeader(): Record<string, string> {
-  const token = localStorage.getItem('sat_sa_token');
+  const token = localStorage.getItem('soclens_token') || localStorage.getItem('sat_sa_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

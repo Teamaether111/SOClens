@@ -566,7 +566,7 @@ app.get('/api/reports/export/:type', authMiddleware, (req: AuthenticatedRequest,
   }
 
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="sat_sa_${type}_report.csv"`);
+  res.setHeader('Content-Disposition', `attachment; filename="SOClens_${type}_report.csv"`);
   res.send(csv);
 });
 
@@ -589,7 +589,7 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`=======================================================`);
-    console.log(`SAT-SA — Supervisory Analytics Tool for SOC Assessment`);
+    console.log(`SOClens — Supervisory Analytics Tool for SOC Assessment`);
     console.log(`"From SOC Data to Supervisory Intelligence"`);
     console.log(`Air-gapped & Offline Local Supervisory Engine Ready`);
     console.log(`Listening on http://0.0.0.0:${PORT}`);

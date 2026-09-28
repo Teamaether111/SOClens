@@ -263,8 +263,15 @@ export const Network3D: React.FC<Network3DProps> = ({ cses, onSelectCSE }) => {
           Interactive 3D Supervisory Network
         </div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-          Central Node: NCIIPC Hub | Orbiting: 20 Critical Sector Entities | Node Scale = Attention Score
+          Central Node: SOClens Supervisory Core | Orbiting: 20 Critical Sector Entities | Node Scale = Attention Score
         </div>
+      </div>
+
+      {/* Central Node Visual Label */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -mt-14 pointer-events-none text-center opacity-85">
+        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.4)]">
+          SOClens Core Hub
+        </span>
       </div>
 
       {/* Legend & Instructions */}

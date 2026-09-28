@@ -31,14 +31,14 @@ export const ReportsPage: React.FC = () => {
       const doc = new jsPDF();
       const now = new Date().toLocaleString();
 
-      // Official NCIIPC / SAT-SA Header
+      // Official NCIIPC / SOClens Header
       doc.setFillColor(7, 13, 24);
       doc.rect(0, 0, 210, 35, 'F');
 
       doc.setTextColor(0, 240, 255);
       doc.setFont('courier', 'bold');
       doc.setFontSize(16);
-      doc.text('SAT-SA — SUPERVISORY ASSESSMENT REPORT', 14, 15);
+      doc.text('SOClens — SUPERVISORY ASSESSMENT REPORT', 14, 15);
 
       doc.setTextColor(200, 220, 240);
       doc.setFontSize(9);
@@ -54,7 +54,7 @@ export const ReportsPage: React.FC = () => {
 
       doc.setFontSize(10);
       doc.setFont('courier', 'normal');
-      doc.text('Supervisory Doctrine: "SIEMs monitor threats. SAT-SA monitors the effectiveness of the SOC itself."', 14, 55);
+      doc.text('Supervisory Doctrine: "SIEMs monitor threats. SOClens monitors the effectiveness of the SOC itself."', 14, 55);
 
       // Executive Summary Metrics
       doc.setFillColor(240, 245, 250);
@@ -110,9 +110,9 @@ export const ReportsPage: React.FC = () => {
       doc.line(14, 275, 196, 275);
       doc.setFontSize(8);
       doc.setTextColor(100, 115, 130);
-      doc.text('CONFIDENTIAL SUPERVISORY AUDIT REPORT • PRODUCED BY SAT-SA FOR NCIIPC ASSESSORS', 14, 282);
+      doc.text('CONFIDENTIAL SUPERVISORY AUDIT REPORT • PRODUCED BY SOClens FOR NCIIPC ASSESSORS', 14, 282);
 
-      doc.save(`SAT_SA_${reportType.replace(/\s+/g, '_')}_2026_Q3.pdf`);
+      doc.save(`SOClens_${reportType.replace(/\s+/g, '_')}_2026_Q3.pdf`);
     } catch (err: any) {
       alert(`PDF generation failed: ${err.message}`);
     } finally {

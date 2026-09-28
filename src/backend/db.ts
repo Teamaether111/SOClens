@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import * as XLSX from 'xlsx';
 import {
   User, CSEEntity, Asset, Alert, Case, Investigation, Escalation,
   Finding, Anomaly, Score, PeerGroup, SupervisorReview, AuditLog,
@@ -107,7 +108,7 @@ export class DatabaseManager {
           objectType: 'SYSTEM',
           objectId: 'SYS_0',
           oldValue: null,
-          newValue: 'SAT-SA Supervisory Intelligence Platform Initialized'
+          newValue: 'SOClens Supervisory Intelligence Platform Initialized'
         }
       ],
       datasets: [],
@@ -625,7 +626,7 @@ export class DatabaseManager {
 
   public ingestUploadedData(
     fileName: string,
-    format: 'CSV' | 'JSON',
+    format: 'CSV' | 'JSON' | 'XML' | 'SQL' | 'XLSX' | string,
     rawText: string,
     user = 'SUPERVISOR'
   ): {
@@ -636,41 +637,245 @@ export class DatabaseManager {
   } {
     const warnings: string[] = [];
     const errors: string[] = [];
-    let parsedRecords: any[] = [];
+    let canonicalRecords: {
+      case_id: string;
+      entity_id: string;
+      activity: string;
+      timestamp: string;
+      severity: string;
+      asset_id: string;
+      actor_id?: string;
+      type?: string;
+      status?: string;
+      slaCompliance?: number;
+      closureRate?: number;
+      escalationRate?: number;
+    }[] = [];
+
+    // Canonical normalizer
+    const toCanonical = (raw: any, index: number) => {
+      const caseId = String(
+        raw.case_id || raw.caseId || raw.caseID || raw.id || raw.ticket_id || raw.docket_id || `CAS-ING-${Date.now()}-${index}`
+      ).trim();
+      const entityId = String(
+        raw.entity_id || raw.cseId || raw.cse_id || raw.entity || raw.org_id || 'CSE-01'
+      ).trim();
+      const activity = String(
+        raw.activity || raw.title || raw.action || raw.event || raw.category || raw.operation || 'Triage & Case Resolution'
+      ).trim();
+      const timestamp = String(
+        raw.timestamp || raw.createdAt || raw.created_at || raw.time || raw.datetime || new Date().toISOString()
+      ).trim();
+      const rawSeverity = String(raw.severity || raw.priority || raw.level || 'HIGH').toUpperCase().trim();
+      const severity = ['CRITICAL', 'HIGH', 'MODERATE', 'LOW'].includes(rawSeverity) ? rawSeverity : 'HIGH';
+      const assetId = String(
+        raw.asset_id || raw.assetId || raw.primaryAssetId || raw.system_id || raw.host || 'AST-1001'
+      ).trim();
+      const actorId = String(
+        raw.actor_id || raw.actorId || raw.analyst || raw.user || raw.assigned_to || 'SOC-OPERATOR-1'
+      ).trim();
+
+      const type = raw.type || (raw.slaCompliance !== undefined ? 'REPORTED_KPI' : raw.category || raw.activity?.toLowerCase().includes('alert') ? 'ALERT' : 'CASE');
+
+      return {
+        case_id: caseId,
+        entity_id: entityId,
+        activity,
+        timestamp,
+        severity,
+        asset_id: assetId,
+        actor_id: actorId,
+        type,
+        status: raw.status || 'CLOSED',
+        slaCompliance: raw.slaCompliance !== undefined ? parseFloat(raw.slaCompliance) : undefined,
+        closureRate: raw.closureRate !== undefined ? parseFloat(raw.closureRate) : undefined,
+        escalationRate: raw.escalationRate !== undefined ? parseFloat(raw.escalationRate) : undefined
+      };
+    };
 
     try {
-      if (format === 'JSON') {
-        const json = JSON.parse(rawText);
-        parsedRecords = Array.isArray(json) ? json : json.records || [];
-      } else {
-        // Simple CSV parsing
-        const lines = rawText.split('\n').filter(l => l.trim().length > 0);
-        if (lines.length > 1) {
-          const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-          for (let i = 1; i < lines.length; i++) {
-            const cols = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-            const row: Record<string, any> = {};
-            for (let h = 0; h < headers.length; h++) {
-              row[headers[h]] = cols[h];
+      const effectiveFormat = (format || 'JSON').toUpperCase();
+
+      // 1. JSON Parser
+      if (effectiveFormat === 'JSON' || fileName.toLowerCase().endsWith('.json')) {
+        let json: any;
+        try {
+          json = JSON.parse(rawText);
+        } catch (jsonErr: any) {
+          throw new Error(`Failed parsing JSON file "${fileName}": Syntax error (${jsonErr.message}). Verify JSON brackets and quotation syntax.`);
+        }
+        const items = Array.isArray(json) ? json : json.records || json.cases || json.data || [json];
+        if (!Array.isArray(items) || items.length === 0) {
+          throw new Error(`JSON file "${fileName}" contains no record array or payload elements.`);
+        }
+        canonicalRecords = items.map((item, idx) => toCanonical(item, idx));
+      }
+
+      // 2. CSV Parser
+      else if (effectiveFormat === 'CSV' || fileName.toLowerCase().endsWith('.csv')) {
+        const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if (lines.length < 2) {
+          throw new Error(`CSV file "${fileName}" contains insufficient tabular rows (found ${lines.length} lines; header + data rows required).`);
+        }
+        // Split header handling quotes
+        const parseCSVLine = (line: string) => {
+          const result: string[] = [];
+          let current = '';
+          let inQuotes = false;
+          for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            if (char === '"' || char === "'") {
+              inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+              result.push(current.trim().replace(/^["']|["']$/g, ''));
+              current = '';
+            } else {
+              current += char;
             }
-            parsedRecords.push(row);
+          }
+          result.push(current.trim().replace(/^["']|["']$/g, ''));
+          return result;
+        };
+
+        const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/[\s_-]/g, ''));
+        for (let i = 1; i < lines.length; i++) {
+          const values = parseCSVLine(lines[i]);
+          if (values.length === 0 || (values.length === 1 && values[0] === '')) continue;
+          const rowObj: Record<string, string> = {};
+          headers.forEach((h, colIdx) => {
+            rowObj[h] = values[colIdx] || '';
+          });
+          canonicalRecords.push(toCanonical(rowObj, i));
+        }
+      }
+
+      // 3. XML Parser (Structured legacy SIEM / ticketing export)
+      else if (effectiveFormat === 'XML' || fileName.toLowerCase().endsWith('.xml')) {
+        if (!rawText.includes('<') || !rawText.includes('>')) {
+          throw new Error(`Malformed XML in "${fileName}": No XML tags or markup discovered in file payload.`);
+        }
+
+        // Check for unbalanced or truncated XML
+        const openRoot = rawText.match(/<([a-zA-Z0-9_-]+)[\s>]/);
+        if (!openRoot) {
+          throw new Error(`Malformed XML structure in "${fileName}": Could not identify opening root element.`);
+        }
+
+        const tagMatches = rawText.match(/<(case|record|ticket|entry|row|alert)[\s\S]*?<\/\1>/gi);
+        if (!tagMatches || tagMatches.length === 0) {
+          throw new Error(`XML parsing failure in "${fileName}": No valid <case>, <record>, or <ticket> structured nodes found.`);
+        }
+
+        canonicalRecords = tagMatches.map((block, idx) => {
+          const extractTag = (tag: string) => {
+            const m = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
+            return m ? m[1].trim() : '';
+          };
+          return toCanonical({
+            case_id: extractTag('case_id') || extractTag('caseId') || extractTag('id') || extractTag('ticket_id') || extractTag('docket'),
+            entity_id: extractTag('entity_id') || extractTag('cse_id') || extractTag('cseId') || extractTag('entity'),
+            activity: extractTag('activity') || extractTag('title') || extractTag('summary') || extractTag('action'),
+            timestamp: extractTag('timestamp') || extractTag('created_at') || extractTag('createdAt') || extractTag('date'),
+            severity: extractTag('severity') || extractTag('priority') || extractTag('level'),
+            asset_id: extractTag('asset_id') || extractTag('assetId') || extractTag('primaryAssetId') || extractTag('system'),
+            actor_id: extractTag('actor_id') || extractTag('analyst') || extractTag('owner') || extractTag('operator')
+          }, idx);
+        });
+      }
+
+      // 4. SQL / Database Dump Parser (.sql or .db)
+      else if (effectiveFormat === 'SQL' || fileName.toLowerCase().endsWith('.sql') || fileName.toLowerCase().endsWith('.db')) {
+        // Look for INSERT INTO statements or values
+        const insertRegex = /INSERT\s+INTO\s+[`"']?([a-zA-Z0-9_]+)[`"']?\s*(?:\(([^)]+)\))?\s+VALUES\s*([\s\S]+?)(?:;|$)/gi;
+        const matches = [...rawText.matchAll(insertRegex)];
+
+        if (matches.length === 0) {
+          // If file has SQL words but malformed syntax
+          if (rawText.toLowerCase().includes('insert') || rawText.toLowerCase().includes('create table')) {
+            throw new Error(`SQL syntax error in "${fileName}": Database dump contains unclosed or malformed INSERT statement syntax.`);
+          }
+          throw new Error(`SQL database dump error in "${fileName}": No recognizable 'INSERT INTO' records found in export.`);
+        }
+
+        let idx = 0;
+        for (const match of matches) {
+          const colDefs = match[2] ? match[2].split(',').map(c => c.trim().replace(/[`"'\[\]]/g, '').toLowerCase().replace(/[\s_-]/g, '')) : [];
+          const valuesSection = match[3];
+          const tuples = valuesSection.matchAll(/\(([^)]+)\)/g);
+          
+          for (const tuple of tuples) {
+            const rawVals = tuple[1].split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''));
+            if (colDefs.length > 0) {
+              const rowObj: Record<string, string> = {};
+              colDefs.forEach((col, cIdx) => {
+                rowObj[col] = rawVals[cIdx] || '';
+              });
+              canonicalRecords.push(toCanonical(rowObj, idx++));
+            } else {
+              // Standard positional schema: (case_id, entity_id, activity, timestamp, severity, asset_id, actor_id)
+              canonicalRecords.push(toCanonical({
+                case_id: rawVals[0],
+                entity_id: rawVals[1],
+                activity: rawVals[2],
+                timestamp: rawVals[3],
+                severity: rawVals[4],
+                asset_id: rawVals[5],
+                actor_id: rawVals[6]
+              }, idx++));
+            }
           }
         }
       }
-    } catch (e: any) {
-      errors.push(`Parse failure: ${e.message}`);
+
+      // 5. XLSX Spreadsheet Export Parser
+      else if (effectiveFormat === 'XLSX' || fileName.toLowerCase().endsWith('.xlsx')) {
+        try {
+          let workbook: XLSX.WorkBook;
+          if (rawText.startsWith('data:')) {
+            const base64Data = rawText.split(',')[1];
+            workbook = XLSX.read(base64Data, { type: 'base64' });
+          } else {
+            workbook = XLSX.read(rawText, { type: 'binary' });
+          }
+
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            throw new Error(`Spreadsheet workbook "${fileName}" contains no valid sheets.`);
+          }
+
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows: any[] = XLSX.utils.sheet_to_json(firstSheet);
+          if (!rows || rows.length === 0) {
+            throw new Error(`Spreadsheet "${fileName}" contains empty worksheet with no data rows.`);
+          }
+
+          canonicalRecords = rows.map((r, i) => toCanonical(r, i));
+        } catch (excelErr: any) {
+          throw new Error(`XLSX spreadsheet parsing failed in "${fileName}": ${excelErr.message}`);
+        }
+      }
+
+      else {
+        throw new Error(`Unsupported export format "${format}" for file "${fileName}". System accepts CSV, JSON, XML, SQL (.sql/.db), or XLSX.`);
+      }
+
+    } catch (parseError: any) {
+      errors.push(parseError.message || `Parsing error in file ${fileName}`);
     }
 
-    if (parsedRecords.length === 0) {
-      errors.push('No parseable records found in uploaded file.');
+    if (errors.length === 0 && canonicalRecords.length === 0) {
+      errors.push(`Validation failure in "${fileName}": No parseable case management records converted to canonical schema.`);
     }
 
     const datasetId = `dts_${Date.now()}`;
+    const datasetFormat: Dataset['format'] = (['CSV', 'JSON', 'XML', 'SQL', 'XLSX'].includes(format.toUpperCase()) 
+      ? format.toUpperCase() 
+      : 'JSON') as Dataset['format'];
+
     const dataset: Dataset = {
       id: datasetId,
       fileName,
-      format,
-      recordCount: parsedRecords.length,
+      format: datasetFormat,
+      recordCount: canonicalRecords.length,
       validationStatus: errors.length > 0 ? 'ERRORS' : warnings.length > 0 ? 'WARNINGS' : 'VALID',
       warnings,
       errors,
@@ -680,57 +885,65 @@ export class DatabaseManager {
     };
 
     this.state.datasets.unshift(dataset);
-    this.logAudit(user, 'DATASET_UPLOAD', 'DATASET', datasetId, null, `Uploaded ${fileName} (${parsedRecords.length} records)`);
+    this.logAudit(
+      user, 
+      'DATASET_UPLOAD', 
+      'DATASET', 
+      datasetId, 
+      null, 
+      `Uploaded ${fileName} [${format}] (${canonicalRecords.length} canonical records: case_id, entity_id, activity, timestamp, severity, asset_id, actor_id)`
+    );
 
-    // Ingest alerts / cases / reported kpis if present
-    if (errors.length === 0 && parsedRecords.length > 0) {
+    // Downstream pipeline behaves IDENTICALLY once converted to canonical schema
+    if (errors.length === 0 && canonicalRecords.length > 0) {
       let ingestedAlerts = 0;
       let ingestedCases = 0;
       let ingestedKpis = 0;
 
-      for (const rec of parsedRecords) {
-        if (rec.type === 'ALERT' || rec.alertId || rec.category) {
+      for (const rec of canonicalRecords) {
+        if (rec.type === 'REPORTED_KPI' || rec.slaCompliance !== undefined) {
+          this.state.reported_kpis.push({
+            id: `kpi-up-${Date.now()}-${ingestedKpis}`,
+            cseId: rec.entity_id || 'CSE-01',
+            reportingCycle: '2026-Q3',
+            slaCompliance: rec.slaCompliance !== undefined ? rec.slaCompliance : 0.92,
+            closureRate: rec.closureRate !== undefined ? rec.closureRate : 0.88,
+            escalationRate: rec.escalationRate !== undefined ? rec.escalationRate : 0.85,
+            createdAt: rec.timestamp || new Date().toISOString()
+          });
+          ingestedKpis++;
+        } else if (rec.type === 'ALERT') {
           this.state.alerts.push({
-            id: rec.id || `ALT-UP-${Date.now()}-${ingestedAlerts}`,
-            cseId: rec.cseId || 'CSE-01',
-            assetId: rec.assetId || 'AST-1001',
-            title: rec.title || 'Ingested Telemetry Alert',
-            category: rec.category || 'MALWARE',
-            severity: rec.severity || 'HIGH',
-            createdAt: rec.createdAt || new Date().toISOString(),
-            acknowledgedAt: rec.acknowledgedAt || null,
-            status: rec.status || 'CLOSED'
+            id: rec.case_id.startsWith('ALT') ? rec.case_id : `ALT-${rec.case_id}`,
+            cseId: rec.entity_id || 'CSE-01',
+            assetId: rec.asset_id || 'AST-1001',
+            title: rec.activity,
+            category: 'MALWARE',
+            severity: rec.severity as any,
+            createdAt: rec.timestamp,
+            acknowledgedAt: rec.timestamp,
+            status: (rec.status || 'CLOSED') as any
           });
           ingestedAlerts++;
-        } else if (rec.type === 'CASE' || rec.caseId) {
+        } else {
+          // Standard canonical Case Docket
           this.state.cases.push({
-            id: rec.id || `CAS-UP-${Date.now()}-${ingestedCases}`,
-            cseId: rec.cseId || 'CSE-01',
-            title: rec.title || 'Ingested Docket',
-            severity: rec.severity || 'HIGH',
+            id: rec.case_id.startsWith('CAS') ? rec.case_id : `CAS-${rec.case_id}`,
+            cseId: rec.entity_id || 'CSE-01',
+            title: rec.activity,
+            severity: rec.severity as any,
             relatedAlertIds: [],
-            primaryAssetId: rec.primaryAssetId || 'AST-1001',
-            status: rec.status || 'CLOSED',
-            createdAt: rec.createdAt || new Date().toISOString(),
-            acknowledgedAt: rec.acknowledgedAt || null,
-            investigationStartedAt: rec.investigationStartedAt || null,
-            escalatedAt: rec.escalatedAt || null,
-            closedAt: rec.closedAt || null,
-            closureReason: rec.closureReason || null,
+            primaryAssetId: rec.asset_id || 'AST-1001',
+            status: (rec.status || 'CLOSED') as any,
+            createdAt: rec.timestamp,
+            acknowledgedAt: rec.timestamp,
+            investigationStartedAt: rec.timestamp,
+            escalatedAt: rec.timestamp,
+            closedAt: rec.timestamp,
+            closureReason: 'Resolved by CSE Operations Staff',
             reopenedCount: 0
           });
           ingestedCases++;
-        } else if (rec.type === 'REPORTED_KPI' || rec.slaCompliance !== undefined) {
-          this.state.reported_kpis.push({
-            id: rec.id || `kpi-up-${Date.now()}-${ingestedKpis}`,
-            cseId: rec.cseId || 'CSE-01',
-            reportingCycle: rec.reportingCycle || '2026-Q3',
-            slaCompliance: parseFloat(rec.slaCompliance) || 0.90,
-            closureRate: parseFloat(rec.closureRate) || 0.85,
-            escalationRate: parseFloat(rec.escalationRate) || 0.80,
-            createdAt: new Date().toISOString()
-          });
-          ingestedKpis++;
         }
       }
 
@@ -742,7 +955,7 @@ export class DatabaseManager {
 
     return {
       datasetId,
-      recordCount: parsedRecords.length,
+      recordCount: canonicalRecords.length,
       warnings,
       errors
     };
@@ -750,3 +963,4 @@ export class DatabaseManager {
 }
 
 export const db = new DatabaseManager();
+

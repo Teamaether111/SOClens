@@ -186,7 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <Sparkles className="w-3 h-3" /> SUPERVISORY DOCTRINE
         </div>
         <p className="leading-relaxed">
-          "SAT-SA recommends. The supervisor decides."
+          "SOClens recommends. Supervisors decide."
         </p>
       </div>
     </aside>

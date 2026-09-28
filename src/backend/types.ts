@@ -259,7 +259,7 @@ export interface AuditLog {
 export interface Dataset {
   id: string;
   fileName: string;
-  format: 'CSV' | 'JSON' | 'SYNTHETIC';
+  format: 'CSV' | 'JSON' | 'XML' | 'SQL' | 'XLSX' | 'SYNTHETIC';
   recordCount: number;
   validationStatus: 'VALID' | 'WARNINGS' | 'ERRORS';
   warnings: string[];

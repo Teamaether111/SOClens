@@ -46,10 +46,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate,
               Supervisory Operational Doctrine
             </div>
             <h1 className="text-xl md:text-2xl font-black tracking-tight text-slate-100 font-mono">
-              "SIEMs monitor threats. SAT-SA monitors the effectiveness of the SOC itself."
+              "SIEMs monitor threats. SOClens monitors the effectiveness of the SOC itself."
             </h1>
             <p className="text-xs md:text-sm text-cyan-300/90 font-mono">
-              "A green dashboard is not the same as a working SOC. SAT-SA checks whether the two actually agree."
+              "A green dashboard is not the same as a working SOC. SOClens checks whether the two actually agree."
             </p>
           </div>
 

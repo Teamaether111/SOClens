@@ -71,7 +71,7 @@ export const AnalyticsExplainabilityPage: React.FC = () => {
           Supervisory Analytics & Explainability Framework
         </h1>
         <p className="text-xs font-mono text-slate-300 max-w-3xl leading-relaxed">
-          SAT-SA rejects opaque "black box" conclusions. In critical infrastructure oversight, every supervisory signal must be transparent, verifiable, and explainable to human supervisors.
+          SOClens rejects opaque "black box" conclusions. In critical infrastructure oversight, every supervisory signal must be transparent, verifiable, and explainable to human supervisors.
         </p>
       </div>
 

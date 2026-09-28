@@ -22,13 +22,15 @@ import { SettingsPage } from './pages/SettingsPage';
 import { LoginPage } from './pages/LoginPage';
 import { api } from './api';
 
+import { ThemeProvider } from './context/ThemeContext';
+
 export function App() {
   const [currentRoute, setCurrentRoute] = useState<string>(() => {
     return window.location.pathname || '/dashboard';
   });
 
   const [currentUser, setCurrentUser] = useState<any>(() => {
-    const saved = localStorage.getItem('sat_sa_user');
+    const saved = localStorage.getItem('soclens_user') || localStorage.getItem('sat_sa_user');
     return saved ? JSON.parse(saved) : {
       username: 'supervisor',
       name: 'NCIIPC Senior Supervisor',
@@ -184,7 +186,13 @@ export function App() {
 
     // 9. Ingestion: /ingestion
     if (currentRoute === '/ingestion') {
-      return <IngestionPage onNavigate={navigate} onDataIngested={loadDashboardStats} />;
+      return (
+        <IngestionPage
+          onNavigate={navigate}
+          onDataIngested={loadDashboardStats}
+          onGenerateDemo={handleGenerateDemoData}
+        />
+      );
     }
 
     // 10. Reports: /reports
@@ -218,49 +226,50 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Top Navbar */}
-      <Navbar
-        onOpenSearch={() => setIsSearchOpen(true)}
-        onGenerateDemo={handleGenerateDemoData}
-        onRunAssessment={handleRunAssessment}
-        isProcessing={isProcessing}
-        currentUser={currentUser}
-        lastAnalyzed={dashboardStats?.lastAnalyzed}
-      />
-
-      {/* Main Body with Sidebar & Content */}
-      <div className="flex flex-1">
-        <Sidebar
-          currentRoute={currentRoute}
-          onNavigate={navigate}
-          stats={{
-            highAttentionCses: dashboardStats?.csesRequiringAttention || 4,
-            contradictions: dashboardStats?.kpiEvidenceContradictions || 3,
-            reviewCases: dashboardStats?.casesRecommendedForReview || 12
-          }}
+    <ThemeProvider>
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200 transition-colors">
+        {/* Top Navbar */}
+        <Navbar
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onRunAssessment={handleRunAssessment}
+          isProcessing={isProcessing}
+          currentUser={currentUser}
+          lastAnalyzed={dashboardStats?.lastAnalyzed}
         />
 
-        <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden">
-          {renderCurrentPage()}
-        </main>
-      </div>
+        {/* Main Body with Sidebar & Content */}
+        <div className="flex flex-1">
+          <Sidebar
+            currentRoute={currentRoute}
+            onNavigate={navigate}
+            stats={{
+              highAttentionCses: dashboardStats?.csesRequiringAttention || 4,
+              contradictions: dashboardStats?.kpiEvidenceContradictions || 3,
+              reviewCases: dashboardStats?.casesRecommendedForReview || 12
+            }}
+          />
 
-      {/* Global Search Modal (Ctrl+K) */}
-      <GlobalSearch
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onNavigate={navigate}
-      />
-
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-cyan-500/60 text-slate-100 px-4 py-3 rounded-lg shadow-2xl font-mono text-xs max-w-md flex items-center gap-3 animate-in slide-in-from-bottom-5">
-          <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
-          <span>{toastMessage}</span>
+          <main className="flex-1 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full overflow-x-hidden">
+            {renderCurrentPage()}
+          </main>
         </div>
-      )}
-    </div>
+
+        {/* Global Search Modal (Ctrl+K) */}
+        <GlobalSearch
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          onNavigate={navigate}
+        />
+
+        {/* Toast Notification */}
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-cyan-500/60 text-slate-100 px-4 py-3 rounded-lg shadow-2xl font-mono text-xs max-w-md flex items-center gap-3 animate-in slide-in-from-bottom-5">
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
+            <span>{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    </ThemeProvider>
   );
 }
 

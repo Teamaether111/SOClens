@@ -200,7 +200,7 @@ export const FindingDetailPage: React.FC<FindingDetailPageProps> = ({
               <UserCheck className="w-4 h-4 text-cyan-400" /> Human Supervisor Adjudication Panel
             </h2>
             <p className="text-[11px] font-mono text-slate-400 mt-0.5">
-              "SAT-SA recommends. The supervisor decides." Only a human supervisor can confirm or dismiss a signal.
+              "SOClens recommends. Supervisors decide." Only a human supervisor can confirm or dismiss a signal.
             </p>
           </div>
 
